@@ -24,4 +24,4 @@ requires:
   SNMP: 0
   Test::More: 0
   namespace::autoclean: 0
-version: 0.10
+version: 0.11
