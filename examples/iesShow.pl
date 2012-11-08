@@ -40,7 +40,9 @@ my $result = $device->slotInventory;
 
 my $slotlist = $device->slots;
 
-foreach my $slot ( sort { $a->id <=> $b->id } @$slotlist ) {
+foreach my $sid ( sort keys %{$slotlist} ) {
+  my $slot = $slotlist->{$sid};
+
   $slot->fetchDetails;
 
   printf "  Slot: %d, Cardtype: %s, Firmware: %s\n", $slot->id, $slot->cardtype, $slot->firmware;
@@ -49,8 +51,10 @@ foreach my $slot ( sort { $a->id <=> $b->id } @$slotlist ) {
 
   die "$pir\n" unless $pir eq 'OK';
 
-  foreach my $port ( sort { $a->id <=> $b->id } @{$slot->ports} ) {
-	  printf "%02d: %s, %s, %s\n", $port->id, $port->profile, $port->adminstatus == 1 ? 'UP' : 'DOWN', $port->operstatus == 1 ? 'UP' : 'DOWN';
+  my $ports = $slot->ports;
+  foreach my $pid ( sort keys %{$ports} ) {
+    my $port = $ports->{$pid};
+    printf "%02d: %s, %s, %s\n", $port->id, $port->profile, $port->adminstatus == 1 ? 'UP' : 'DOWN', $port->operstatus == 1 ? 'UP' : 'DOWN';
   }
 }
 

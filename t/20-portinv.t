@@ -74,18 +74,8 @@ my $si = $d->slotInventory();
 #
 my $s = $d->slots;
 
-ok (scalar( @{$s} ) == 3 );
-
-my $slot;
-
-foreach my $sl ( @{$s} ) {
-  if ( $sl->id == 3 ) {
-	  $slot = $sl;
-	  last;
-  }
-}
-
-ok (defined($slot));
+ok ($d->num_slots == 3 );
+ok ($d->has_slot('3'));
 
 # What if the card type changes to one with lesser ports?
 # create an SNMP catcher for cardtype lookup for portInventory
@@ -118,22 +108,25 @@ ok (defined($slot));
 
 # portInventory will fetch the card type and 
 # call fetchdetails for all ports created
+my $slot = $d->get_slot('3');
 my $pi = $slot->portInventory();
 
 ok($pi eq 'OK');
 
 my $p = $slot->ports;
 
-ok( scalar(@{$p}) == 24);
+ok( $slot->num_ports == 24);
 
-foreach my $port ( @$p ) {
-  isa_ok( $port, 'Device::ZyXEL::IES::Port' );
-  ok($port->id =~ /^\d+$/);
-  ok($port->profile =~ /profile/);
-  ok( $port->adminstatus == 2 );
+foreach my $port ( $slot->port_pairs ) {
+	my $p = $port->[1];
+  isa_ok( $p, 'Device::ZyXEL::IES::Port' );
+  ok($p->id =~ /^\d+$/);
+
+  ok($p->profile =~ /profile/);
+  ok( $p->adminstatus == 2 );
 }
 
-my $port = $p->[0];
+my $port = $slot->get_port('301');
 
 isa_ok( $port,   'Device::ZyXEL::IES::Port' );
 

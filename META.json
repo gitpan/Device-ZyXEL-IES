@@ -32,13 +32,15 @@
       },
       "runtime" : {
          "requires" : {
+            "Capture::Tiny" : "0",
             "Moose" : "0",
             "Net::SNMP::Util" : "0",
+            "SNMP" : "0",
             "Test::More" : "0",
             "namespace::autoclean" : "0"
          }
       }
    },
    "release_status" : "stable",
-   "version" : "0.01"
+   "version" : "0.10"
 }

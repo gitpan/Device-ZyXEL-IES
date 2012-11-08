@@ -13,6 +13,8 @@ WriteMakefile(
     PL_FILES            => {},
     PREREQ_PM => {
         'Test::More' => 0,
+        'SNMP' => 0,
+        'Capture::Tiny' => 0,
         'Net::SNMP::Util' => 0,
         'namespace::autoclean' => 0,
         'Moose' => 0,

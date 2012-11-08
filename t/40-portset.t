@@ -54,11 +54,10 @@ my $TESTCARDTYPE;
 ($TESTOID, $TESTVALUE)  = ( '.1.3.6.1.2.1.2.2.1.7.301', '2' );
 
 # will fire a snmp set of adminstatus oid
-my $pdr = $p->adminstatus(2);
+my $pdr = $p->write_adminstatus(2);
 
 $TESTVALUE = '1';
-$pdr = $p->adminstatus(1);
-
+$pdr = $p->write_adminstatus(1);
 
 ## now test profiles.
 
@@ -67,21 +66,21 @@ $TESTCARDTYPE = 'ALC1248G-51'; # ADSL mode
 ($TESTOID, $TESTVALUE)  = ( '.1.3.6.1.2.1.10.94.1.1.1.1.4.301', '10240d1024u' );
 
 # Should read cardtype automatically via trigger
-$pdr = $p->profile( '10240d1024u' );
+$pdr = $p->write_profile( '10240d1024u' );
 
 $TESTCARDTYPE = 'VLC1348G-51'; # VDSL mode
 $s->read_cardtype(); # to make the slot change type
 ($TESTOID, $TESTVALUE)  = ( '.1.3.6.1.2.1.10.97.1.1.1.1.3.301', '20240d1024u' );
 
 # Should read cardtype automatically via trigger
-$pdr = $p->profile( '20240d1024u' );
+$pdr = $p->write_profile( '20240d1024u' );
 
 $TESTCARDTYPE = 'SLC1348G-51'; # VDSL mode
 $s->read_cardtype(); # to make the slot change type
 ($TESTOID, $TESTVALUE)  = ( '.1.3.6.1.2.1.10.48.1.1.1.2.301', '1024' );
 
 # Should read cardtype automatically via trigger
-$pdr = $p->profile( '1024' );
+$pdr = $p->write_profile( '1024' );
 
 
 ## now try INP
@@ -89,34 +88,34 @@ $pdr = $p->profile( '1024' );
 $TESTCARDTYPE = 'ALC1248G-51'; # ADSL mode
 $s->read_cardtype(); # to make the slot change type
 ($TESTOID, $TESTVALUE)  = ( '.1.3.6.1.4.1.890.1.5.13.5.8.2.1.1.15.301', '4' );
-$pdr = $p->inp_down( '4' );
+$pdr = $p->write_inpdown( '4' );
 ($TESTOID, $TESTVALUE)  = ( '.1.3.6.1.4.1.890.1.5.13.5.8.2.1.1.14.301', '6' );
-$pdr = $p->inp_up( '6' );
+$pdr = $p->write_inpup( '6' );
 
 
 # try a wrong value - he validity of this test is that it 
 # does not add one to the testplan, cause it does no SNMP
 # it still sets the inp_down attribute to 9 though
-$pdr = $p->inp_down( '9' );
-ok ( $p->inp_down == 9 );
+$pdr = $p->write_inpdown( '9' );
+ok ( $p->inp_down == 4 );
 
 $TESTCARDTYPE = 'VLC1348G-51'; # ADSL mode
 $s->read_cardtype(); # to make the slot change type
 ($TESTOID, $TESTVALUE)  = ( '.1.3.6.1.4.1.890.1.5.13.5.8.10.1.1.6.301', '40' );
-$pdr = $p->inp_down( '40' );
+$pdr = $p->write_inpdown( '40' );
 
 ($TESTOID, $TESTVALUE)  = ( '.1.3.6.1.4.1.890.1.5.13.5.8.10.1.1.7.301', '60' );
-$pdr = $p->inp_up( '60' );
+$pdr = $p->write_inpup( '60' );
 
 ($TESTOID, $TESTVALUE)  = ( '.1.3.6.1.4.1.890.1.5.13.5.1.3.1.1.2.301', '5' );
-$pdr = $p->maxmac( '5' );
+$pdr = $p->write_maxmac( '5' );
 
 # Annex M
 $TESTCARDTYPE = 'ALC1248G-51'; # ADSL mode
 $s->read_cardtype(); # to make the slot change type
 ($TESTOID, $TESTVALUE)  = ( '.1.3.6.1.4.1.890.1.5.13.5.8.2.1.1.3.301', '2' );
-$pdr = $p->annexM( '2' );
+$pdr = $p->write_annexM( '2' );
 
 # AnnexL
 ($TESTOID, $TESTVALUE)  = ( '.1.3.6.1.4.1.890.1.5.13.5.8.2.1.1.2.301', '3' );
-$pdr = $p->annexL( '3' );
+$pdr = $p->write_annexL( '3' );

@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 6;
+use Test::More tests => 8;
 
 use Net::SNMP qw(:asn1);
 use Device::ZyXEL::IES;
@@ -40,7 +40,7 @@ my $s = Device::ZyXEL::IES::Slot->new(
 # no initialization of any other attributes, since the value
 # is not to be trusted unless it is actually delivered by the 
 # IES
-ok( scalar(@{$s->ports}) == 0);
+ok( scalar(keys %{$s->ports}) == 0);
 ok( $s->iftype eq 'ADSL' ); ## the default
 
 # create another slot object
@@ -48,8 +48,14 @@ my $s2 = Device::ZyXEL::IES::Slot->new(
   id => 3, 
   ies => $d);
 
+my $slotlist = $d->slots();
+
+ok( $d->has_slot( 3 ) );
+ok( !$d->has_slot( 4 ) );
+
 $s2->read_cardtype();
-ok( scalar(@{$s2->ports}) == 48);
+
+ok( scalar(keys %{$s2->ports}) == 48);
 ok( $s2->iftype eq 'ADSL' );
 
 
@@ -70,5 +76,5 @@ ok( $s2->iftype eq 'ADSL' );
 
 # "discover" that the card type is new
 $s2->read_cardtype();
-ok( scalar(@{$s2->ports}) == 24);
+ok( scalar(keys %{$s2->ports}) == 24);
 ok( $s2->iftype eq 'VDSL' );

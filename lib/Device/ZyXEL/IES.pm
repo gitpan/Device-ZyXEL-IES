@@ -2,6 +2,7 @@ package Device::ZyXEL::IES;
 use Moose;
 use Net::SNMP::Util qw/snmpwalk snmpget/;
 use Device::ZyXEL::IES::Slot;
+use Device::ZyXEL::IES::OID;
 
 # ABSTRACT: SNMP with a ZyXEL IES device
 
@@ -14,11 +15,11 @@ using SNMP.
 
 =head1 VERSION
 
-Version 0.01
+Version 0.10
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.10';
 
 =head1 SYNOPSIS
 
@@ -43,30 +44,37 @@ Quick summary of what the module does.
 =cut
 
 has 'slots' => (
-	traits => ['Array'],
-    isa => 'ArrayRef[Device::ZyXEL::IES::Slot]', 
+	traits => ['Hash'],
+    isa => 'HashRef[Device::ZyXEL::IES::Slot]', 
 	is => 'ro', 
-	default => sub { [] }, 
+	default => sub { {} }, 
 	required => 0, 
 	handles => {
-	  add_slot => 'push'
+    slot_exists => 'exists',
+	  get_slot => 'get', 
+	  add_slot => 'set', 
+	  delete_slot => 'delete',
+	  num_slots => 'count'
 	}, 
 	writer => '_set_slots'
 );
 
+our $oid_tr;
 sub BUILD {
 	my ( $self, $params ) = @_;
-	foreach my $slot ( @{ $self->slots } ) {
-		$slot->ies( $self )
+	my $slots = $self->slots;
+	foreach my $slot ( keys %{$slots} ) {
+		$slots->{$slot}->ies( $self )
   }
+  $oid_tr = Device::ZyXEL::IES::OID->new;
 }
 
 after 'slots' => sub {
   my ( $self, $slots ) = @_;
 	return unless $slots;
-	foreach my $slot ( @$slots ) {
-		$slot->ies( $self );
-	}
+	foreach my $slot ( keys %{$slots} ) {
+		$slots->{$slot}->ies( $self )
+  }
 };
 
 has 'uptime' => (
@@ -106,16 +114,22 @@ has 'hostname' => (
 
 Uses Net::SNMP::Util to read the value of an oid
 
+The oid passed here is a real one, not a name.
+ 
 =cut
 sub read_oid {
-  my ($self,  $oid) = @_;
-  
+  my ($self,  $oid,  $translate) = @_;
+
+  $translate = {} unless defined $translate;
+  $translate->{'-timeticks'} = 0x0;  # Turn off so sysUpTime is numeric
+  my @translatelist = ();
+  for my $k ( keys %{$translate} ) {
+    push @translatelist,$k,$translate->{$k};
+  }
   my %snmpparams = (
     -version   => 2, 
     -community => $self->get_community(), 
-    -translate   => [
-       -timeticks => 0x0   # Turn off so sysUpTime is numeric
-                    ]
+    -translate   => \@translatelist
   );
 	
   my $r = snmpget(
@@ -135,6 +149,78 @@ sub read_oid {
   return $vals->{o};
 }
 
+=head2 walk_oid
+
+ Does a snmpwalk of the given oid, and returns the result.
+ 
+ scalar containing "ERROR: <something>" is returned upon error.
+
+=cut
+sub walk_oid {
+  my ($self, $oid, $translate) = @_;
+  $translate = {} unless defined $translate;
+  my @translatelist = ();
+  for my $k ( keys %{$translate} ) {
+    push @translatelist,$k,$translate->{$k};
+  }
+  
+  my %snmpparams = (
+    -version   => 1,
+    -community => $self->get_community(),
+    -translate => \@translatelist
+  );
+  
+  # use Net::SNMP::Util to do the walk
+  my ($result,  $error) = snmpwalk(
+    hosts => [$self->hostname()],
+    snmp  => \%snmpparams,
+    oids => [$oid] );
+  
+  return "ERROR: $error" if defined $error && $error ne '';
+  return $result->{$self->hostname()}->[0];
+}
+
+=head2 read_oids
+ 
+Uses Net::SNMP::Util to read the value of a set of oids
+ 
+The oids passed here is a real ones, not a name.
+
+=cut
+sub read_oids {
+  my ($self,  $oids ) = @_;
+  
+  my %snmpparams = (
+  -version   => 2,
+  -community => $self->get_community(),
+  -translate   => [ -timeticks => 0x0 ]
+  );
+	
+  my $r = snmpget(
+    hosts => [ $self->hostname ],
+    oids  => $oids,
+    snmp => \%snmpparams
+  );
+  
+  return "[ERROR] Nothing returned" unless defined $r->{$self->hostname};
+  
+  my $vals = $r->{$self->hostname};
+  
+  return $vals;
+}
+
+=head2 has_slot
+
+ Checks whether or not a specific slot id is present in the slot list.
+ 
+=cut
+sub has_slot {
+  my ($self,$slotid) = @_;
+
+	return ( defined $self->slots()->{$slotid} );
+}
+
+
 =head2 read_uptime
 
 Reads the system uptime from the IES.
@@ -142,7 +228,8 @@ Reads the system uptime from the IES.
 =cut
 sub read_uptime {
   my ($self) = @_;
-  my $uptime = $self->read_oid('.1.3.6.1.2.1.1.3.0');
+  my $oid = $oid_tr->translate('DISMAN-EVENT-MIB::sysUpTimeInstance');
+  my $uptime = $self->read_oid($oid);
   if ( $uptime !~ /ERROR/ ) {
 	$self->_set_uptime( $uptime );
   }
@@ -156,7 +243,8 @@ Reads the system description from the IES.
 =cut
 sub read_sysdescr {
   my ($self) = @_;
-  my $sysdescr = $self->read_oid('.1.3.6.1.2.1.1.1.0');
+  my $oid =  $oid_tr->translate('SNMPv2-MIB::sysDescr.0');
+  my $sysdescr = $self->read_oid($oid);
   if ( $sysdescr !~ /ERROR/ ) {
 	$self->_set_sysdescr( $sysdescr );
   }
@@ -179,18 +267,19 @@ sub slotInventory {
   my $self = shift;
 
   # Start by clearing the slotlist.
-  $self->_set_slots([]);
+  $self->_set_slots({});
 
   my %snmpparams = (
     -version   => 1, 
     -community => $self->get_community() 
   );
 
+  my $oid = $oid_tr->translate('ZYXEL-IES5000-MIB::slotModuleDescr.0');
   # use Net::SNMP::Util to do the walk
   my ($result,  $error) = snmpwalk(
       hosts => [$self->hostname()], 
       snmp  => \%snmpparams, 
-      oids => ['.1.3.6.1.4.1.890.1.5.13.5.6.3.1.3.0'] );
+      oids => [$oid] );
 
   return "[ERROR] $error" unless defined $result;
 
@@ -203,7 +292,7 @@ sub slotInventory {
           cardtype => $result->{$self->hostname()}->[0]->{$o}, 
           ies => $self
         );
-        $self->add_slot( $s );
+        $self->add_slot( $o, $s );
       }
     }
   }
@@ -227,7 +316,7 @@ sub fetchDetails {
   my $meta = $self->meta();
 
   foreach my $method ( $meta->get_method_list ) {
-    if ( $method =~ /^read_/ && $method ne 'read_oid' ) {
+    if ( $method =~ /^read_/ && $method !~ /^read_oid.*$/ ) {
        my $res = $self->$method;
        return $res if $res =~ /ERROR/i;
     }
@@ -245,7 +334,7 @@ Please report any bugs or feature requests to C<bug-device-zyxel-ies at rt.cpan.
 the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Device-ZyXEL-IES>.  I will be notified, and then you'll
 automatically be notified of progress on your bug as I make changes.
 
-
+:w
 
 
 =head1 SUPPORT

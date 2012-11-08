@@ -18,8 +18,10 @@ no_index:
     - t
     - inc
 requires:
+  Capture::Tiny: 0
   Moose: 0
   Net::SNMP::Util: 0
+  SNMP: 0
   Test::More: 0
   namespace::autoclean: 0
-version: 0.01
+version: 0.10

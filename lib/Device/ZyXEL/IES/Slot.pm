@@ -2,6 +2,7 @@ package Device::ZyXEL::IES::Slot;
 use Moose;
 use Net::SNMP::Util;
 use Device::ZyXEL::IES::Port;
+use Device::ZyXEL::IES::OID;
 
 =head1 NAME
 
@@ -9,11 +10,11 @@ Device::ZyXEL::IES::Slot - A model of a Slot on an IES.
 
 =head1 VERSION
 
-Version 0.01
+Version 0.10
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.10';
 
 =head1 SYNOPSIS
 
@@ -53,37 +54,55 @@ has 'iftype' => (
 # A list of ports,  1-24 or 1-48, howmany ever
 # ports the slot contains.
 has 'ports' => (
-  traits => ['Array'], 
-  isa => 'ArrayRef[Device::ZyXEL::IES::Port]', 
+  traits => ['Hash'], 
+  isa => 'HashRef[Device::ZyXEL::IES::Port]', 
   is => 'rw', 
-  default => sub { [] }, 
+  default => sub { {} }, 
   handles => {
-    add_port => 'push'
+    port_exists => 'exists',
+    get_port => 'get',
+    add_port => 'set', 
+    delete_port => 'delete', 
+    num_ports => 'count', 
+    port_pairs => 'kv'
   }
 );
 
+our $oid_tr;
+=head2 BUILD
+ 
+ Create a handle for a Device::ZyXEL::IES::OID object in order
+ to translate OID names to actual oids.
+ 
+=cut
 sub BUILD {
   my ( $self,  $params ) = @_;
-  foreach my $port ( @{ $self->ports } ) {
-	    $port->slot( $self )
+	my $ports = $self->ports;
+  foreach my $port ( keys %{$ports} ) {
+	    $ports->{$port}->slot( $self );
   }
+	$self->ies->add_slot( $params->{id}, $self );
+  $oid_tr = Device::ZyXEL::IES::OID->new;
 }
 
 after 'ports' => sub {
   my ( $self,  $ports ) = @_;
   return unless $ports;
-  foreach my $port ( @$ports ) {
-	    $port->slot( $self );
-	}
+	my $p = $self->ports;
+  foreach my $port ( keys %{$p} ) {
+	    $p->{$port}->slot( $self );
+  }
 };
 
 has 'ies' => (
   isa => 'Device::ZyXEL::IES', 
   is => 'rw', 
-  weak_ref => 1
+  weak_ref => 1, 
+  required => 1
 );
 
 =head1 FUNCTIONS
+
 
 =head2 read_oid
 
@@ -92,16 +111,30 @@ for a specific slot. Used internally by _set_*
 
 =cut
 sub read_oid {
-  my ($self,  $oid) = @_;
+  my ($self,  $oidname ) = @_;
 
-  if ( $oid =~ /\%d/ ) {
-	  $oid = sprintf( $oid, $self->id );
-  }
-  else {
-	  $oid = $oid . '.' . $self->id;
-  }
+  my $oid = $oid_tr->translate( $oidname );
+  
+  return "ERROR: translate of $oidname failed" unless defined( $oid );
+  
+  $oid = $oid . '.' . $self->id;
+
   return $self->ies->read_oid( $oid );
 }
+
+
+=head2 has_port
+ 
+ Checks whether or not a specific port id is present in the port list.
+ 
+=cut
+sub has_port {
+  my ($self,$portid) = @_;
+ 
+	my $ports = $self->ports;
+	return defined( $ports->{$portid} );
+}
+
 
 =head2 read_firmware
 
@@ -112,7 +145,7 @@ using Net::SNMP::Util
 
 sub read_firmware {
   my ($self) = @_;
-  my $firmware = $self->read_oid('.1.3.6.1.4.1.890.1.5.13.5.6.3.1.4.0.%d');
+  my $firmware = $self->read_oid('ZYXEL-IES5000-MIB::slotModuleFWVersion.0');
   if ( $firmware !~ /ERROR/ ) {
     $self->_set_firmware( $firmware );
   }
@@ -129,23 +162,22 @@ on the slot.
 sub alignports {
   my ($self, $nofports) = @_;
   
+  my $ports = $self->ports;
   for ( my $p = 1; $p <= $nofports; $p++ ) {
-    my $portid = sprintf( "%d%02d", $self->id,  $p);
-	# Check if this id allready exist.
-    my $exists = 0;
-	foreach my $ap ( @{$self->ports} ) {
-      if ( $ap->id eq $portid ) {
-        $exists=1; 
-        last;
-	  }
-	}
-	push @{$self->ports}, Device::ZyXEL::IES::Port->new( id => $portid, slot => $self) unless $exists;
+    my $portid = sprintf( "%d%02d", $self->id,  $p); 
+		if ( !defined( $ports->{$portid} ) ) {
+      $self->add_port( $portid, Device::ZyXEL::IES::Port->new( id => $portid,  slot => $self) );
+		}
   }
 
-  # check if the numbers match
-  if ( scalar( @{$self->ports} ) > $nofports ) {
-    splice @{$self->ports}, $nofports;
-  }
+	if ( $self->num_ports > $nofports ) {
+    # more ports that we want? - remove them
+		my $num_ports = $self->num_ports;
+		for ( my $p = ($nofports + 1); $p <= $num_ports; $p++ ) {
+      my $portid = sprintf( "%d%02d", $self->id,  $p); 
+		  $self->delete_port( $portid );
+		}
+	}
 }
 
 =head2 read_cardtype
@@ -157,29 +189,30 @@ using Net::SNMP::Util
 
 sub read_cardtype {
   my ($self) = @_;
-  my $cardtype = $self->read_oid('.1.3.6.1.4.1.890.1.5.13.5.6.3.1.3.0.%d');
+  my $cardtype = $self->read_oid('ZYXEL-IES5000-MIB::slotModuleDescr.0');
   if ( $cardtype !~ /ERROR/ ) {
     $self->_set_cardtype( $cardtype );
-    if ( $cardtype =~ /^MSC/ ) {
-      $self->iftype('MSC');
-	  $self->alignports(0);
-    }
-    elsif ( $cardtype =~ /^VLC\d\d(\d\d).*$/ ) {
-      $self->iftype('VDSL');
-	  $self->alignports($1);
-    }
-    elsif ( $cardtype =~ /^SLC\d\d(\d\d).*$/ ) {
-      $self->iftype('SHDSL');
-	  $self->alignports($1);
-    }
-    elsif ( $cardtype =~ /^ALC\d\d(\d\d).*$/ ) {
-      $self->iftype('ADSL');
-	  $self->alignports($1);
-    }
-	else {
-      $self->iftype('Unknown');
-	  $self->alignports(0);
 	}
+
+  if ( $cardtype =~ /^MSC/ ) {
+    $self->iftype('MSC');
+    $self->alignports(0);
+  }
+  elsif ( $cardtype =~ /^VLC\d\d(\d\d).*$/ ) {
+    $self->iftype('VDSL');
+    $self->alignports($1);
+  }
+  elsif ( $cardtype =~ /^SLC\d\d(\d\d).*$/ ) {
+    $self->iftype('SHDSL');
+	  $self->alignports($1);
+  }
+  elsif ( $cardtype =~ /^ALC\d\d(\d\d).*$/ ) {
+    $self->iftype('ADSL');
+    $self->alignports($1);
+  }
+	else {
+    $self->iftype('Unknown');
+	  $self->alignports(0);
   }
   return $cardtype;
 }
@@ -196,9 +229,9 @@ sub fetchDetails {
 
   foreach my $method ( $meta->get_method_list ) {
     if ( $method =~ /^read_/ && $method ne 'read_oid' ) {
-	   my $res = $self->$method;
-       return $res if $res =~ /ERROR/i;
-	}
+	    my $res = $self->$method;
+      return $res if $res =~ /ERROR/i;
+    }
   }
   return 'OK';
 }
@@ -215,9 +248,9 @@ sub portInventory {
   my $cres = $self->read_cardtype();
   if ( $cres !~ /ERROR/ ) {
     my $pres;
-	foreach my $port ( @{$self->ports} ) {
-	  $pres = $port->fetchDetails();
-	  return $pres if $pres =~ /ERROR/;
+    foreach my $port ( $self->port_pairs ) {
+      $pres = $port->[1]->fetchDetails();
+      return $pres if $pres =~ /ERROR/;
     }
   }
   else {
@@ -275,4 +308,3 @@ Fullrate (http://www.fullrate.dk)
 
 __PACKAGE__->meta->make_immutable;
 
-1; # End of Device::ZyXEL::IES::Slot

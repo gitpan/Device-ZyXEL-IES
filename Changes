@@ -3,3 +3,5 @@ Revision history for Device-ZyXEL-IES
 0.01    2012-10-04/afternoon GMT
         First version, contains all the bits I need for my own use.
 
+0.02    2012-10-09
+        Added hlog, qln, snr spectrum data.

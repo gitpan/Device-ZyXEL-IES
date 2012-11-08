@@ -68,17 +68,17 @@ my $si = $d->slotInventory();
 
 # Now the slots should contain something
 #
-ok (scalar(@{$d->slots}) == 10 );
+ok (scalar( keys %{$d->slots}) == 10 );
 
 my $si2 = $d->slotInventory();
 
-ok (scalar(@{$d->slots}) == 10 );
+ok (scalar( keys %{$d->slots}) == 10 );
 
 #diag ( Dumper( $s ) );
 
-foreach my $s ( @{$d->slots} ) {
-	isa_ok( $s, 'Device::ZyXEL::IES::Slot' );
-	my $i = $s->id;
-    ok( $s->cardtype eq sprintf("Type(%d-1)", $i) );
+my $slots = $d->slots;
+foreach my $s ( keys %{$slots} ) {
+	isa_ok( $slots->{$s}, 'Device::ZyXEL::IES::Slot' );
+  ok( $slots->{$s}->cardtype eq sprintf("Type(%d-1)", $s) );
 }
 
